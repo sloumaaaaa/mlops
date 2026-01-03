@@ -1,53 +1,61 @@
-# mlops-mlflow-tp
+# California Housing Price Prediction - MLOps Project
 
-Projet d'exemple pour MLOps avec MLflow (jeu de données Iris)
+[![ML Pipeline CI/CD](https://github.com/yourusername/mlops/actions/workflows/ml_pipeline.yml/badge.svg)](https://github.com/yourusername/mlops/actions)
 
-Structure:
-- requirements.txt
-- train.py (exécution simple)
-- train_mlflow.py (tracking MLflow avec paramètres et métriques)
+Un projet MLOps complet démontrant les meilleures pratiques pour le développement, le versioning, et le déploiement de modèles de Machine Learning.
 
-Installation (Windows PowerShell):
+## 🎯 Objectif du Projet
 
-1. Créer et activer un environnement virtuel (recommandé)
+Prédire les prix de l'immobilier en Californie en utilisant un pipeline MLOps professionnel avec:
+- ✅ **Git** pour le versioning du code
+- ✅ **MLflow** pour le tracking des expériences
+- ✅ **DVC** pour le versioning des données
+- ✅ **GitHub Actions** pour l'automatisation CI/CD
+- ✅ **Optuna** pour l'optimisation d'hyperparamètres (fonctionnalité avancée)
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
+## 📊 Dataset
 
-2. Installer les dépendances
+**California Housing Prices Dataset**
+- 20,640 échantillons
+- 8 features (MedInc, HouseAge, AveRooms, etc.)
+- Target: Prix médian des maisons
 
-```powershell
+**3 Versions du Dataset:**
+1. **V1**: Dataset original complet
+2. **V2**: Dataset filtré (outliers supprimés, focus côtier)
+3. **V3**: Feature engineering (4 nouvelles features créées)
+
+## 🚀 Installation Rapide
+
+```bash
+# Cloner le repository
+git clone <your-repo-url>
+cd MLOPS
+
+# Créer environnement virtuel
+python -m venv venv
+venv\Scripts\activate  # Windows
+# source venv/bin/activate  # Linux/Mac
+
+# Installer les dépendances
 pip install -r requirements.txt
+
+# Initialiser DVC
+dvc init
 ```
 
-Exemples d'utilisation:
+## 🏃 Quick Start
 
-- Lancer l'entraînement simple:
-
-```powershell
-python train.py
+### Option 1: Workflow Automatisé Complet
+```bash
+python run_complete_workflow.py
 ```
 
-- Lancer l'entraînement avec MLflow (paramètres modifiables):
-
-```powershell
-python train_mlflow.py --n_estimators 150 --random_state 42
-python train_mlflow.py --n_estimators 50 --random_state 0
-```
-
-- Démarrer l'UI MLflow (dans un terminal séparé):
-
-```powershell
-mlflow ui
-```
-
-Puis ouvrir http://localhost:5000
-
-Ce que vous verrez dans l'UI MLflow:
-- Liste des runs pour l'experiment `iris-mlops`
-- Comparaison des métriques (accuracy, precision)
+Cette commande exécute automatiquement:
+1. Création des 3 versions de datasets
+2. Entraînement de plusieurs modèles
+3. Optimisation d'hyperparamètres avec Optuna
+4. Évaluation et comparaison des résultats
 - Paramètres utilisés (`n_estimators`, `random_state`)
 - Modèles sauvegardés (section "Artifacts" -> `model`)
 

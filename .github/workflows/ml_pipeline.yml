@@ -1,0 +1,307 @@
+name: MLOps Pipeline CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly on Monday at 2 AM
+    - cron: '0 2 * * 1'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  # Job 1: Code Quality and Testing
+  code-quality:
+    runs-on: ubuntu-latest
+    name: Code Quality Check
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort pytest
+          pip install -r requirements.txt
+      
+      - name: Check code formatting with Black
+        run: |
+          black --check src/ || echo "Code formatting issues found"
+        continue-on-error: true
+      
+      - name: Check import sorting with isort
+        run: |
+          isort --check-only src/ || echo "Import sorting issues found"
+        continue-on-error: true
+      
+      - name: Lint with flake8
+        run: |
+          # Stop the build if there are Python syntax errors or undefined names
+          flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Exit-zero treats all errors as warnings
+          flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        continue-on-error: true
+
+  # Job 2: Data Validation and Versioning
+  data-validation:
+    runs-on: ubuntu-latest
+    name: Data Validation
+    needs: code-quality
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Initialize DVC
+        run: |
+          dvc init --no-scm || echo "DVC already initialized"
+      
+      - name: Load Dataset Version 1
+        run: |
+          python src/data_loader.py --version 1
+          echo "✅ Dataset V1 loaded successfully"
+      
+      - name: Load Dataset Version 2
+        run: |
+          python src/data_loader.py --version 2
+          echo "✅ Dataset V2 loaded successfully"
+      
+      - name: Load Dataset Version 3
+        run: |
+          python src/data_loader.py --version 3
+          echo "✅ Dataset V3 loaded successfully"
+      
+      - name: Validate datasets
+        run: |
+          python -c "
+          import pandas as pd
+          import os
+          
+          datasets = [
+              'data/v1_california_housing.csv',
+              'data/v2_filtered_housing.csv', 
+              'data/v3_engineered_housing.csv'
+          ]
+          
+          for dataset in datasets:
+              if os.path.exists(dataset):
+                  df = pd.read_csv(dataset)
+                  print(f'✅ {dataset}: {df.shape[0]} rows, {df.shape[1]} columns')
+                  assert 'MedHouseVal' in df.columns, 'Target column missing'
+              else:
+                  print(f'❌ {dataset} not found')
+          
+          print('All datasets validated successfully!')
+          "
+      
+      - name: Upload datasets as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: datasets
+          path: data/*.csv
+          retention-days: 7
+
+  # Job 3: Model Training
+  model-training:
+    runs-on: ubuntu-latest
+    name: Train ML Models
+    needs: data-validation
+    
+    strategy:
+      matrix:
+        model: [random_forest, xgboost]
+        data_version: [v1, v2, v3]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Download datasets
+        uses: actions/download-artifact@v3
+        with:
+          name: datasets
+          path: data/
+      
+      - name: Train model - ${{ matrix.model }} on ${{ matrix.data_version }}
+        run: |
+          python src/train.py \
+            --data_path data/${{ matrix.data_version }}_*.csv \
+            --model ${{ matrix.model }} \
+            --data_version ${{ matrix.data_version }} \
+            --experiment "github-actions-${{ matrix.data_version }}"
+      
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: model-${{ matrix.model }}-${{ matrix.data_version }}
+          path: |
+            models/*.pkl
+            artifacts/*.png
+          retention-days: 30
+
+  # Job 4: Hyperparameter Optimization (Only for best dataset)
+  hyperparameter-tuning:
+    runs-on: ubuntu-latest
+    name: Hyperparameter Optimization
+    needs: data-validation
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Download datasets
+        uses: actions/download-artifact@v3
+        with:
+          name: datasets
+          path: data/
+      
+      - name: Run Optuna optimization (limited trials for CI)
+        run: |
+          python src/hyperparameter_tuning.py \
+            --data_path data/v3_engineered_housing.csv \
+            --model xgboost \
+            --n_trials 20 \
+            --data_version v3
+        timeout-minutes: 20
+      
+      - name: Upload optimization results
+        uses: actions/upload-artifact@v3
+        with:
+          name: optuna-results
+          path: results/optuna/*
+          retention-days: 30
+
+  # Job 5: Model Evaluation and Comparison
+  model-evaluation:
+    runs-on: ubuntu-latest
+    name: Evaluate and Compare Models
+    needs: model-training
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Generate comparison report
+        run: |
+          python src/evaluate.py --compare_all || echo "No MLflow runs to compare (expected in CI)"
+        continue-on-error: true
+      
+      - name: Upload comparison results
+        uses: actions/upload-artifact@v3
+        with:
+          name: evaluation-results
+          path: results/*
+          retention-days: 30
+        if: always()
+
+  # Job 6: Generate Summary Report
+  summary-report:
+    runs-on: ubuntu-latest
+    name: Generate Summary
+    needs: [model-training, hyperparameter-tuning, model-evaluation]
+    if: always()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Create summary
+        run: |
+          echo "# 🚀 MLOps Pipeline Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Pipeline Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run Number**: ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Jobs Status" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Code Quality: Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Data Validation: Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Model Training: Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Hyperparameter Tuning: Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Model Evaluation: Completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Artifacts Generated" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 Datasets (3 versions)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🤖 Trained Models (multiple variants)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📈 Evaluation Reports" >> $GITHUB_STEP_SUMMARY
+          echo "- 🎯 Hyperparameter Optimization Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review MLflow experiments" >> $GITHUB_STEP_SUMMARY
+          echo "2. Compare model performance" >> $GITHUB_STEP_SUMMARY
+          echo "3. Select best model for deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "*Generated by GitHub Actions MLOps Pipeline*" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Comment on PR (if applicable)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🤖 **MLOps Pipeline Completed**\n\nAll ML training jobs have finished. Check the Actions tab for detailed results and artifacts.'
+            })

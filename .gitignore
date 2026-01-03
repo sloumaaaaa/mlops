@@ -35,5 +35,25 @@ model.pkl
 *.ckpt
 artifacts/
 
+# DVC - Do not track actual data files, only .dvc files
+/data/*.csv
+!/data/.gitkeep
+
+# Models directory
+/models/*.pkl
+!/models/.gitkeep
+
+# Results directory
+/results/
+!/results/.gitkeep
+
 # Conda/pip env files
 environment.yml
+
+# Optuna database
+optuna.db
+
+# Temporary files
+*.tmp
+*.log
+.DS_Store

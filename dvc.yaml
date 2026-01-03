@@ -1,16 +1,70 @@
 stages:
-  add_data:
-    # Generate the dataset (or otherwise produce the CSV) and declare the CSV as the output.
-    # Using `python generate.py` ensures the stage produces `data/iris_data.csv` which
-    # DVC can track as an output.
-    cmd: python generate.py
+  # Stage 1: Load raw data (Version 1)
+  load_v1:
+    cmd: python src/data_loader.py --version 1
     deps:
-      - generate.py
+      - src/data_loader.py
     outs:
-      - data/iris_data.csv
-  push:
-    # Push DVC-tracked data to the configured remote. This stage depends on the
-    # CSV output produced by the add_data stage.
-    cmd: python -m dvc push
+      - data/v1_california_housing.csv
+
+  # Stage 2: Create filtered dataset (Version 2)
+  load_v2:
+    cmd: python src/data_loader.py --version 2
     deps:
-      - data/iris_data.csv
+      - src/data_loader.py
+    outs:
+      - data/v2_filtered_housing.csv
+
+  # Stage 3: Create feature engineered dataset (Version 3)
+  load_v3:
+    cmd: python src/data_loader.py --version 3
+    deps:
+      - src/data_loader.py
+    outs:
+      - data/v3_engineered_housing.csv
+
+  # Stage 4: Train baseline model with V1
+  train_v1:
+    cmd: python src/train.py --data_path data/v1_california_housing.csv --model random_forest --data_version v1
+    deps:
+      - src/train.py
+      - data/v1_california_housing.csv
+    metrics:
+      - artifacts/metrics_v1.json:
+          cache: false
+
+  # Stage 5: Train XGBoost with V2
+  train_v2:
+    cmd: python src/train.py --data_path data/v2_filtered_housing.csv --model xgboost --data_version v2
+    deps:
+      - src/train.py
+      - data/v2_filtered_housing.csv
+    metrics:
+      - artifacts/metrics_v2.json:
+          cache: false
+
+  # Stage 6: Train optimized model with V3
+  train_v3:
+    cmd: python src/train.py --data_path data/v3_engineered_housing.csv --model xgboost --data_version v3
+    deps:
+      - src/train.py
+      - data/v3_engineered_housing.csv
+    metrics:
+      - artifacts/metrics_v3.json:
+          cache: false
+
+  # Stage 7: Hyperparameter tuning
+  optimize:
+    cmd: python src/hyperparameter_tuning.py --data_path data/v3_engineered_housing.csv --model xgboost --n_trials 50 --data_version v3
+    deps:
+      - src/hyperparameter_tuning.py
+      - data/v3_engineered_housing.csv
+    outs:
+      - results/optuna/xgboost_best_params.json
+      - results/optuna/xgboost_study.pkl
+
+  # Stage 8: Compare all models
+  evaluate:
+    cmd: python src/evaluate.py --compare_all
+    deps:
+      - src/evaluate.py
