@@ -262,9 +262,12 @@ class HyperparameterTuner:
             
             if save_path:
                 Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-                fig1.write_image(f"{save_path}_history.png")
-                fig2.write_image(f"{save_path}_importance.png")
-                logger.info(f"Plots saved to {save_path}")
+                try:
+                    fig1.write_image(f"{save_path}_history.png")
+                    fig2.write_image(f"{save_path}_importance.png")
+                    logger.info(f"Plots saved to {save_path}")
+                except Exception as e:
+                    logger.warning(f"Could not save plots as PNG: {e}. Install kaleido if needed.")
             
             return fig1, fig2
         except ImportError:
