@@ -2,7 +2,7 @@ name: MLOps Pipeline CI/CD
 
 on:
   push:
-    branches: [ main, develop, dev ]
+    branches: [ main, dev ]
   pull_request:
     branches: [ main ]
   schedule:
@@ -123,7 +123,7 @@ jobs:
           "
       
       - name: Upload datasets as artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: datasets
           path: data/*.csv
@@ -155,7 +155,7 @@ jobs:
           pip install -r requirements.txt
       
       - name: Download datasets
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: datasets
           path: data/
@@ -169,7 +169,7 @@ jobs:
             --experiment "github-actions-${{ matrix.data_version }}"
       
       - name: Upload model artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: model-${{ matrix.model }}-${{ matrix.data_version }}
           path: |
@@ -198,7 +198,7 @@ jobs:
           pip install -r requirements.txt
       
       - name: Download datasets
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: datasets
           path: data/
@@ -213,7 +213,7 @@ jobs:
         timeout-minutes: 20
       
       - name: Upload optimization results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: optuna-results
           path: results/optuna/*
@@ -245,7 +245,7 @@ jobs:
         continue-on-error: true
       
       - name: Upload comparison results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: evaluation-results
           path: results/*
