@@ -2,7 +2,7 @@ name: MLOps Pipeline CI/CD
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, dev ]
   pull_request:
     branches: [ main ]
   schedule:
