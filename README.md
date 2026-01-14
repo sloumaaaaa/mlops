@@ -57,6 +57,17 @@ Cette commande exécute automatiquement:
 
 ### Option 0: Monitoring & Data Drift Detection
 
+#### ⭐ Training with Auto-Monitoring (Recommended)
+```bash
+# Train model + generate monitoring baseline automatically
+python src/train.py \
+  --data_path data/v3_engineered_housing.csv \
+  --model gradient_boosting \
+  --data_version v3
+  
+# Monitoring stats are automatically logged to MLflow!
+```
+
 #### Démonstration Complète
 ```bash
 # Exécuter la démo de monitoring
@@ -72,7 +83,9 @@ python calculate_train_stats.py --train-data data/v3_engineered_housing.csv --ta
 python check_production_drift.py --prod-data data/production_data.csv --save-history --alert-on-drift
 ```
 
-📖 **[Guide complet de monitoring](MONITORING_GUIDE.md)**
+📖 **Documentation:**
+- **[Guide complet de monitoring](MONITORING_GUIDE.md)**
+- **[Intégration MLflow + Monitoring](MLFLOW_MONITORING_INTEGRATION.md)** ⭐ NEW!
 
 ### Option 2: Étapes Individuelles
 

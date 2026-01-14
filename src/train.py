@@ -19,6 +19,21 @@ import time
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# Try to import monitoring module
+try:
+    from monitoring import DataDriftMonitor
+    MONITORING_AVAILABLE = True
+except ImportError:
+    try:
+        import sys
+        from pathlib import Path
+        sys.path.append(str(Path(__file__).parent.parent))
+        from src.monitoring import DataDriftMonitor
+        MONITORING_AVAILABLE = True
+    except ImportError:
+        MONITORING_AVAILABLE = False
+        print("Warning: Monitoring module not available")
+
 # Try to import XGBoost (it's optional)
 try:
     from xgboost import XGBRegressor
@@ -198,9 +213,10 @@ def load_data(data_path, test_size=0.2, random_state=42):
 
 
 def train_with_mlflow(data_path, model_name='random_forest', experiment_name='california-housing',
-                      custom_params=None, data_version='v1'):
+                      custom_params=None, data_version='v1', enable_monitoring=True,
+                      target_column='MedHouseVal', drift_threshold=2.0):
     """
-    Complete training pipeline with MLflow tracking
+    Complete training pipeline with MLflow tracking and monitoring integration
     
     Args:
         data_path (str): Path to dataset
@@ -208,6 +224,9 @@ def train_with_mlflow(data_path, model_name='random_forest', experiment_name='ca
         experiment_name (str): MLflow experiment name
         custom_params (dict): Custom hyperparameters
         data_version (str): Version of dataset being used
+        enable_monitoring (bool): Generate monitoring baseline statistics
+        target_column (str): Name of target column for monitoring
+        drift_threshold (float): Threshold multiplier for drift detection
     
     Returns:
         tuple: (model, metrics, run_id)
@@ -267,6 +286,55 @@ def train_with_mlflow(data_path, model_name='random_forest', experiment_name='ca
         # Log model file as artifact
         mlflow.log_artifact(model_path)
         
+        # ===== MONITORING INTEGRATION =====
+        if enable_monitoring and MONITORING_AVAILABLE:
+            logger.info("\n" + "=" * 60)
+            logger.info("GENERATING MONITORING BASELINE STATISTICS")
+            logger.info("=" * 60)
+            
+            try:
+                # Load full dataset for monitoring baseline
+                df_full = pd.read_csv(data_path)
+                
+                # Setup monitoring paths
+                monitoring_dir = Path("artifacts/monitoring")
+                monitoring_dir.mkdir(parents=True, exist_ok=True)
+                
+                stats_filename = f"train_stats_{data_version}_{model_name}.json"
+                stats_path = monitoring_dir / stats_filename
+                
+                # Initialize monitor
+                monitor = DataDriftMonitor(
+                    stats_path=str(stats_path),
+                    threshold_multiplier=drift_threshold
+                )
+                
+                # Calculate and save statistics
+                logger.info(f"Calculating baseline statistics for monitoring...")
+                monitor.save_train_statistics(df_full, target_column=target_column)
+                
+                # Log monitoring config to MLflow
+                mlflow.log_param("monitoring_enabled", True)
+                mlflow.log_param("monitoring_target_column", target_column)
+                mlflow.log_param("monitoring_drift_threshold", drift_threshold)
+                mlflow.log_metric("monitoring_baseline_samples", len(df_full))
+                mlflow.log_metric("monitoring_features_tracked", len(df_full.columns) - 1)
+                
+                # Log monitoring stats as artifact
+                mlflow.log_artifact(str(stats_path), artifact_path="monitoring")
+                
+                logger.info(f"✓ Monitoring baseline saved: {stats_path}")
+                logger.info(f"✓ Artifacts logged to MLflow run: {run_id}")
+                
+            except Exception as e:
+                logger.warning(f"Failed to generate monitoring baseline: {e}")
+                mlflow.log_param("monitoring_enabled", False)
+                mlflow.log_param("monitoring_error", str(e))
+        else:
+            mlflow.log_param("monitoring_enabled", False)
+            if enable_monitoring and not MONITORING_AVAILABLE:
+                logger.warning("Monitoring requested but module not available")
+        
         logger.info("=" * 60)
         logger.info(f"Training completed successfully!")
         logger.info(f"Run ID: {run_id}")
@@ -295,6 +363,12 @@ def main():
                         help='Max depth (for tree-based models)')
     parser.add_argument('--learning_rate', type=float, default=None,
                         help='Learning rate (for boosting models)')
+    parser.add_argument('--enable-monitoring', action='store_true', default=True,
+                        help='Generate monitoring baseline statistics (default: True)')
+    parser.add_argument('--no-monitoring', dest='enable_monitoring', action='store_false',
+                        help='Disable monitoring baseline generation')
+    parser.add_argument('--drift-threshold', type=float, default=2.0,
+                        help='Drift detection threshold multiplier (default: 2.0)')
     
     args = parser.parse_args()
     
@@ -313,7 +387,9 @@ def main():
         model_name=args.model,
         experiment_name=args.experiment,
         custom_params=custom_params if custom_params else None,
-        data_version=args.data_version
+        data_version=args.data_version,
+        enable_monitoring=args.enable_monitoring,
+        drift_threshold=args.drift_threshold
     )
     
     print("\n" + "=" * 60)
