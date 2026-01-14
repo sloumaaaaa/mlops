@@ -12,6 +12,7 @@ Prédire les prix de l'immobilier en Californie en utilisant un pipeline MLOps p
 - ✅ **DVC** pour le versioning des données
 - ✅ **GitHub Actions** pour l'automatisation CI/CD
 - ✅ **Optuna** pour l'optimisation d'hyperparamètres
+- ✅ **Monitoring** pour la détection de data drift
 
 ## 📊 Dataset
 
@@ -53,6 +54,25 @@ Cette commande exécute automatiquement:
 2. Entraînement de plusieurs modèles
 3. Évaluation et comparaison des résultats
 4. Génération de rapports
+
+### Option 0: Monitoring & Data Drift Detection
+
+#### Démonstration Complète
+```bash
+# Exécuter la démo de monitoring
+python demo_monitoring.py
+```
+
+#### Utilisation Manuelle
+```bash
+# 1. Calculer les statistiques du dataset d'entraînement
+python calculate_train_stats.py --train-data data/v3_engineered_housing.csv --target-column MedHouseVal
+
+# 2. Vérifier le drift sur données de production
+python check_production_drift.py --prod-data data/production_data.csv --save-history --alert-on-drift
+```
+
+📖 **[Guide complet de monitoring](MONITORING_GUIDE.md)**
 
 ### Option 2: Étapes Individuelles
 
@@ -124,6 +144,7 @@ Le workflow CI/CD s'exécute automatiquement sur:
 - [INSTALLATION.md](INSTALLATION.md) - Guide d'installation détaillé
 - [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Référence rapide des commandes
 - [PROJET_RESUME.md](PROJET_RESUME.md) - Résumé du projet
+- [MONITORING_GUIDE.md](../MONITORING_GUIDE.md) - Guide de monitoring et détection de drift
 
 ## 🛠️ Technologies Utilisées
 
@@ -144,13 +165,19 @@ MLOPS/
 │   ├── data_loader.py         # Chargement datasets
 │   ├── preprocessing.py       # Preprocessing
 │   ├── train.py              # Entraînement
-│   ├── hyperparameter_tuning.py  # Optuna
-│   └── evaluate.py           # Évaluation
+│   ├── evaluate.py           # Évaluation
+│   └── monitoring.py         # ⭐ Monitoring & drift detection
 ├── data/                      # Datasets (3 versions)
 ├── models/                    # Modèles sauvegardés
+├── artifacts/                 # ⭐ Stats & historique monitoring
 ├── results/                   # Rapports et graphiques
 ├── .github/workflows/         # GitHub Actions
+├── calculate_train_stats.py  # ⭐ Calcul stats entraînement
+├── check_production_drift.py # ⭐ Vérification drift production
+├── demo_monitoring.py        # ⭐ Démonstration monitoring
 ├── dvc.yaml                   # Pipeline DVC
+├── requirements.txt           # Dépendances
+└── MONITORING_GUIDE.md       # ⭐ Guide de monitoringC
 └── requirements.txt           # Dépendances
 ```
 
